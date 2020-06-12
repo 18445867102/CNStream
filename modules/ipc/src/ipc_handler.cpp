@@ -19,13 +19,13 @@
  *************************************************************************/
 
 #include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <rapidjson/document.h>
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <memory>
 #include <string>
 
@@ -198,9 +198,29 @@ bool IPCHandler::ParseStringToPackage(const std::string& str, FrameInfoPackage* 
       try {
         intptr_t tmp = std::stoll(doc["mlu_mem_handle"].GetString());
         pkg->mlu_mem_handle = reinterpret_cast<void*>(tmp);
-      } catch(const std::invalid_argument) {
+      } catch (const std::invalid_argument) {
         LOG(WARNING) << "mlu_mem_handle is invalid.";
         return false;
+      }
+    }
+    if (end == doc.FindMember("shared_mem_fd") || !doc["shared_mem_fd"].IsInt()) {
+      LOG(WARNING) << "parse shared_mem_fd error.";
+    } else {
+      pkg->shared_mem_fd = MemMapType(doc["shared_mem_fd"].GetInt());
+    }
+
+    if (end != doc.FindMember("detect_objs") && doc["detect_objs"].IsArray()) {
+      const rapidjson::Value& objs = doc["detect_objs"];
+      for (size_t i = 0; i < objs.Size(); ++i) {
+        const rapidjson::Value& obj = objs[i];
+        CNInferObjInfo obj_info;
+        obj_info.bbox.x = obj["x"].GetDouble();
+        obj_info.bbox.y = obj["y"].GetDouble();
+        obj_info.bbox.w = obj["w"].GetDouble();
+        obj_info.bbox.h = obj["h"].GetDouble();
+        obj_info.score = obj["score"].GetDouble();
+        obj_info.label_id = obj["label_id"].GetString();
+        pkg->detect_objs.push_back(obj_info);
       }
     }
   }
@@ -265,6 +285,29 @@ bool IPCHandler::SerializeToString(const FrameInfoPackage& pkg, std::string* str
     writer.Key("mlu_mem_handle");
     intptr_t ptmp = reinterpret_cast<intptr_t>(pkg.mlu_mem_handle);
     writer.String(std::to_string(ptmp).c_str());
+
+    writer.Key("shared_mem_fd");
+    writer.Int(static_cast<int>(pkg.shared_mem_fd));
+
+    writer.Key("detect_objs");
+    writer.StartArray();
+    for (const auto& obj_iter : pkg.detect_objs) {
+      writer.StartObject();
+      writer.Key("x");
+      writer.Double(obj_iter.bbox.x);
+      writer.Key("y");
+      writer.Double(obj_iter.bbox.y);
+      writer.Key("w");
+      writer.Double(obj_iter.bbox.w);
+      writer.Key("h");
+      writer.Double(obj_iter.bbox.h);
+      writer.Key("score");
+      writer.Double(obj_iter.score);
+      writer.Key("label_id");
+      writer.String(obj_iter.label_id.c_str());
+      writer.EndObject();
+    }
+    writer.EndArray();
   }
   writer.EndObject();
 
@@ -299,6 +342,18 @@ void IPCHandler::PreparePackageToSend(const PkgType& type, const std::shared_ptr
       send_pkg.ctx.dev_type = data->frame.ctx.dev_type;
       send_pkg.ctx.dev_id = data->frame.ctx.dev_id;
       send_pkg.ctx.ddr_channel = data->frame.ctx.ddr_channel;
+      send_pkg.shared_mem_fd = data->frame.shared_mem_fd;
+      for (const auto& iter : data->objs) {
+        CNInferObjInfo obj;
+        obj.bbox.x = iter->bbox.x;
+        obj.bbox.y = iter->bbox.y;
+        obj.bbox.w = iter->bbox.w;
+        obj.bbox.h = iter->bbox.h;
+        obj.score = iter->score;
+        obj.label_id = iter->id;
+        send_pkg.detect_objs.push_back(obj);
+      }
+
     } break;
     case PkgType::PKG_RELEASE_MEM: {
       if (!data) {
@@ -358,21 +413,51 @@ void IPCHandler::PackageToCNData(const FrameInfoPackage& recv_pkg, std::shared_p
   }
 
   data->frame.mlu_mem_handle = recv_pkg.mlu_mem_handle;
-  // TODO: support different device ctx // NOLINT
-  if (dev_ctx_.dev_type == DevContext::INVALID) {
-    data->frame.ctx.dev_type = recv_pkg.ctx.dev_type;
-    data->frame.ctx.dev_id = recv_pkg.ctx.dev_id;
-    data->frame.ctx.ddr_channel = recv_pkg.ctx.ddr_channel;
-  } else {
-    data->frame.ctx.dev_type = dev_ctx_.dev_type;
-    data->frame.ctx.dev_id = dev_ctx_.dev_id;
-    data->frame.ctx.ddr_channel = data->channel_idx % 4;
+  switch (dev_ctx_.dev_type) {
+    case DevContext::MLU:
+      data->frame.ctx.dev_type = DevContext::MLU;
+      data->frame.ctx.dev_id = dev_ctx_.dev_id;
+      data->frame.ctx.ddr_channel = data->channel_idx % 4;
+      break;
+    case DevContext::CPU:
+      data->frame.ctx.dev_type = DevContext::CPU;
+      break;
+    case DevContext::INVALID:
+    default:
+      data->frame.ctx.dev_type = recv_pkg.ctx.dev_type;
+      data->frame.ctx.dev_id = recv_pkg.ctx.dev_id;
+      data->frame.ctx.ddr_channel = recv_pkg.ctx.ddr_channel;
+      break;
   }
-
+  /*
+   if (dev_ctx_.dev_type == DevContext::INVALID) {
+     data->frame.ctx.dev_type = recv_pkg.ctx.dev_type;
+     data->frame.ctx.dev_id = recv_pkg.ctx.dev_id;
+     data->frame.ctx.ddr_channel = recv_pkg.ctx.ddr_channel;
+   } else if (dev_ctx_.dev_type == DevContext::MLU) {
+     data->frame.ctx.dev_type = DevContext::MLU;
+     data->frame.ctx.dev_id = dev_ctx_.dev_id;
+     data->frame.ctx.ddr_channel = data->channel_idx % 4;
+   } else if (dev_ctx_.dev_type == DevContext::CPU) {
+     data->frame.ctx.dev_type = DevContext::CPU;
+   }
+ */
   // sync shared memory for frame data
   if (!(data->frame.flags & CN_FRAME_FLAG_EOS)) {
     std::lock_guard<std::mutex> lock(mem_map_mutex_);
     data->frame.MmapSharedMem(memmap_type_);
+  }
+
+  data->frame.shared_mem_fd = recv_pkg.shared_mem_fd;
+  for (const auto& iter : recv_pkg.detect_objs) {
+    auto obj = std::make_shared<CNInferObject>();
+    obj->id = iter.label_id;
+    obj->score = iter.score;
+    obj->bbox.x = iter.bbox.x;
+    obj->bbox.y = iter.bbox.y;
+    obj->bbox.w = iter.bbox.w;
+    obj->bbox.h = iter.bbox.h;
+    data->objs.push_back(obj);
   }
 }
 }  //  namespace cnstream

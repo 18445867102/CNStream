@@ -301,6 +301,7 @@ void CNDataFrame::MmapSharedMem(MemMapType type) {
     if (this->ctx.dev_type == DevContext::CPU) {
       // open shared memory, and set to frame syncdata
       auto ptmp = reinterpret_cast<uint8_t*>(map_mem_ptr);
+      this->ptr_cpu[0] = map_mem_ptr;
       for (int i = 0; i < GetPlanes(); i++) {
         size_t plane_size = GetPlaneBytes(i);
         this->data[i].reset(new (std::nothrow) CNSyncedMemory(plane_size));

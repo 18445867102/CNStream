@@ -38,7 +38,7 @@
 
 namespace cnstream {
 
-#define SOCK_BUFSIZE 512  // buffer size
+#define SOCK_BUFSIZE (20*1024)  // buffer size
 
 /**
  * An enumerated type that is used to identify the frame info package type transmitting between processores.
@@ -50,6 +50,12 @@ enum PkgType {
   PKG_EXIT = 2,         ///< package with exit info
   PKG_ERROR = 3         ///< package with error info
 };
+
+typedef struct {
+  CNInferBoundingBox bbox;  ///< position info for object
+  float score;              ///< score
+  std::string label_id;     ///< label id
+} CNInferObjInfo;
 
 /**
  * The structure holding process info and frame info transmitting between processores.
@@ -69,6 +75,8 @@ typedef struct {
   DevContext ctx;                             ///< The device context of this frame.
   MemMapType mem_map_type;                    ///< memory map/shared type.
   void* mlu_mem_handle;                       ///< The MLU memory handle for mlu data.
+  int shared_mem_fd;                          ///< shared memory fd.
+  std::vector<CNInferObjInfo> detect_objs;    ///< detection objects.
 } FrameInfoPackage;
 
 class ModuleIPC;
@@ -176,6 +184,14 @@ class IPCHandler {
   inline void SetDeviceId(const int device_id) {
     dev_ctx_.dev_id = device_id;
     dev_ctx_.dev_type = DevContext::MLU;    // by default: if set device id, use MLU  device type
+  }
+
+  /**
+   *  @brief  Set device type.
+   *  @return Void.
+   */
+  inline void SetDeviceType(DevContext::DevType device_type) {
+    dev_ctx_.dev_type = device_type;
   }
 
  protected:

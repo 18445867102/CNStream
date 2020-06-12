@@ -51,6 +51,7 @@ ModuleIPC::ModuleIPC(const std::string& name) : Module(name) {
   param_register_.Register("socket_address", "Identify socket communicate path.");
   // only support the same device with client when use mlu mem map
   param_register_.Register("device_id", "Identify device id for server processor.");
+  param_register_.Register("discard_frame_no_objs", "Discard frames without detected objects or not.");
   param_register_.Register("max_cachedframe_size",
                            "Identify max size of cached processed frame with shared memory for client.");
 }
@@ -93,9 +94,23 @@ bool ModuleIPC::Open(ModuleParamSet paramSet) {
     return false;
   }
 
+  if (paramSet.find("dev_type") != paramSet.end()) {
+    if (paramSet["dev_type"] == "cpu") {
+      ipc_handler_->SetDeviceType(DevContext::CPU);
+    } else if (paramSet["dev_type"] == "mlu") {
+      ipc_handler_->SetDeviceType(DevContext::MLU);
+    } else {
+      ipc_handler_->SetDeviceType(DevContext::INVALID);
+    }
+  }
+
   if (!ipc_handler_->Open()) {
     LOG(ERROR) << "[ModuleIPC], open ipc handler failed\n";
     return false;
+  }
+
+  if (paramSet.find("discard_frame_no_objs") != paramSet.end()) {
+    discard_frame_no_objs_ = paramSet["discard_frame_no_objs"] == "true" ? true : false;
   }
 
   if (container_ && IPC_SERVER == type) {
@@ -122,6 +137,9 @@ int ModuleIPC::Process(std::shared_ptr<CNFrameInfo> data) {
 
   auto handler = std::dynamic_pointer_cast<IPCClientHandler>(ipc_handler_);
   if (!(data->frame.flags & CN_FRAME_FLAG_EOS)) {
+    if (discard_frame_no_objs_ && (!data->objs.size())) {
+      return 0;
+    }
     data->frame.CopyToSharedMem(handler->GetMemMapType());
     handler->CacheProcessedData(data);
   }
@@ -157,14 +175,14 @@ bool ModuleIPC::CheckParamSet(const ModuleParamSet& paramSet) const {
     return false;
   }
 
-  if (paramSet.find("device_id") == paramSet.end()) {
-    LOG(WARNING) << "[ModuleIPC], device id is not set, will use device info in CNFrameInfo.";
-  }
-
   std::string err_msg;
-  if (!checker.IsNum({"device_id", "max_cachedframe_size"}, paramSet, err_msg)) {
-    LOG(ERROR) << err_msg;
-    return false;
+  if (paramSet.find("device_id") != paramSet.end()) {
+    if (!checker.IsNum({"device_id", "max_cachedframe_size"}, paramSet, err_msg)) {
+      LOG(ERROR) << err_msg;
+      return false;
+    }
+  } else {
+    LOG(WARNING) << "[ModuleIPC], device id is not set, will use device info in CNFrameInfo.";
   }
 
   return true;

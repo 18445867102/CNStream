@@ -130,6 +130,7 @@ class ModuleIPC : public Module, public ModuleCreator<ModuleIPC> {
   */
   void PostFrameToReleaseMem(std::shared_ptr<CNFrameInfo> data);
   size_t chn_cnt_ = 0;      // channel counts
+  bool discard_frame_no_objs_ = false;
 };  // class ModuleIPC
 
 }  // namespace cnstream
