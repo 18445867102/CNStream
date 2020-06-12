@@ -203,11 +203,6 @@ bool IPCHandler::ParseStringToPackage(const std::string& str, FrameInfoPackage* 
         return false;
       }
     }
-    if (end == doc.FindMember("shared_mem_fd") || !doc["shared_mem_fd"].IsInt()) {
-      LOG(WARNING) << "parse shared_mem_fd error.";
-    } else {
-      pkg->shared_mem_fd = MemMapType(doc["shared_mem_fd"].GetInt());
-    }
 
     if (end != doc.FindMember("detect_objs") && doc["detect_objs"].IsArray()) {
       const rapidjson::Value& objs = doc["detect_objs"];
@@ -286,9 +281,6 @@ bool IPCHandler::SerializeToString(const FrameInfoPackage& pkg, std::string* str
     intptr_t ptmp = reinterpret_cast<intptr_t>(pkg.mlu_mem_handle);
     writer.String(std::to_string(ptmp).c_str());
 
-    writer.Key("shared_mem_fd");
-    writer.Int(static_cast<int>(pkg.shared_mem_fd));
-
     writer.Key("detect_objs");
     writer.StartArray();
     for (const auto& obj_iter : pkg.detect_objs) {
@@ -342,7 +334,6 @@ void IPCHandler::PreparePackageToSend(const PkgType& type, const std::shared_ptr
       send_pkg.ctx.dev_type = data->frame.ctx.dev_type;
       send_pkg.ctx.dev_id = data->frame.ctx.dev_id;
       send_pkg.ctx.ddr_channel = data->frame.ctx.ddr_channel;
-      send_pkg.shared_mem_fd = data->frame.shared_mem_fd;
       for (const auto& iter : data->objs) {
         CNInferObjInfo obj;
         obj.bbox.x = iter->bbox.x;
@@ -429,26 +420,13 @@ void IPCHandler::PackageToCNData(const FrameInfoPackage& recv_pkg, std::shared_p
       data->frame.ctx.ddr_channel = recv_pkg.ctx.ddr_channel;
       break;
   }
-  /*
-   if (dev_ctx_.dev_type == DevContext::INVALID) {
-     data->frame.ctx.dev_type = recv_pkg.ctx.dev_type;
-     data->frame.ctx.dev_id = recv_pkg.ctx.dev_id;
-     data->frame.ctx.ddr_channel = recv_pkg.ctx.ddr_channel;
-   } else if (dev_ctx_.dev_type == DevContext::MLU) {
-     data->frame.ctx.dev_type = DevContext::MLU;
-     data->frame.ctx.dev_id = dev_ctx_.dev_id;
-     data->frame.ctx.ddr_channel = data->channel_idx % 4;
-   } else if (dev_ctx_.dev_type == DevContext::CPU) {
-     data->frame.ctx.dev_type = DevContext::CPU;
-   }
- */
+
   // sync shared memory for frame data
   if (!(data->frame.flags & CN_FRAME_FLAG_EOS)) {
     std::lock_guard<std::mutex> lock(mem_map_mutex_);
     data->frame.MmapSharedMem(memmap_type_);
   }
 
-  data->frame.shared_mem_fd = recv_pkg.shared_mem_fd;
   for (const auto& iter : recv_pkg.detect_objs) {
     auto obj = std::make_shared<CNInferObject>();
     obj->id = iter.label_id;
