@@ -89,7 +89,7 @@ bool IPCHandler::ParseStringToPackage(const std::string& str, FrameInfoPackage* 
   }
 
   if (PKG_RELEASE_MEM == pkg->pkg_type || PKG_DATA == pkg->pkg_type) {
-    if (end == doc.FindMember("stream_id") && !doc["stream_id"].IsString()) {
+    if (end == doc.FindMember("stream_id") || !doc["stream_id"].IsString()) {
       LOG(WARNING) << "parse stream_id error.";
       return false;
     } else {

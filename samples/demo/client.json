@@ -37,9 +37,10 @@
     "custom_params" : {
       "ipc_type" : "client",
       "memmap_type" : "cpu",
+      "inter_communicate" : "false",
       "max_cachedframe_size" : "80",
       "discard_frame_no_objs" : "true",
-      "socket_address" : "test_ipc"
+      "socket_address" : "/tmp/test_ipc"
     }
   }
 }

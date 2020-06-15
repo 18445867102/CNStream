@@ -54,6 +54,7 @@ ModuleIPC::ModuleIPC(const std::string& name) : Module(name) {
   param_register_.Register("discard_frame_no_objs", "Discard frames without detected objects or not.");
   param_register_.Register("max_cachedframe_size",
                            "Identify max size of cached processed frame with shared memory for client.");
+  param_register_.Register("inter_cnstream", "Identify server is implemented based on NoduleIPC or not.");
 }
 
 bool ModuleIPC::Open(ModuleParamSet paramSet) {
@@ -111,6 +112,14 @@ bool ModuleIPC::Open(ModuleParamSet paramSet) {
 
   if (paramSet.find("discard_frame_no_objs") != paramSet.end()) {
     discard_frame_no_objs_ = paramSet["discard_frame_no_objs"] == "true" ? true : false;
+  }
+
+  if (paramSet.find("inter_cnstream") != paramSet.end()) {
+    bool inter_communicate = paramSet["inter_communicate"] == "false" ? false : true;
+    if(IPC_CLIENT == type) {
+      auto handler = std::dynamic_pointer_cast<IPCClientHandler>(ipc_handler_);
+      handler->SetInterCommunicate(inter_communicate);
+    }
   }
 
   if (container_ && IPC_SERVER == type) {

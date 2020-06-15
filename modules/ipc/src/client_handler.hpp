@@ -99,6 +99,8 @@ class IPCClientHandler : public IPCHandler {
   bool GetServerState() { return server_closed_.load(); }
 #endif
 
+ inline void SetInterCommunicate(bool inter_communicate) { inter_communicate_ = inter_communicate; }
+
  private:
   /**
    *  @brief  Free shared memory for each frame in cached processed frame.
@@ -118,6 +120,7 @@ class IPCClientHandler : public IPCHandler {
   std::map<std::string, std::shared_ptr<CNFrameInfo>>
       processed_frames_map_;                     // frames which is processed, and wait to release memory
   std::condition_variable framesmap_full_cond_;  // condition variable for processed frames map size
+  bool inter_communicate_ = true;  // identify communicate type, inter cnstream or not
 };
 
 }  //  namespace cnstream

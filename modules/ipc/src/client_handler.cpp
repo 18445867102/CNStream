@@ -41,8 +41,10 @@ bool IPCClientHandler::Open() {
     return false;
   }
 
-  if (!OpenSemphore()) return false;
-  WaitSemphore();
+  if(inter_communicate_) {
+    if (!OpenSemphore()) return false;
+    WaitSemphore();
+  }
 
   if (!client_handle_.Open(socket_address_)) {
     LOG(ERROR) << "client connect to server failed, unix address: " << socket_address_;
@@ -55,7 +57,8 @@ bool IPCClientHandler::Open() {
   is_connected_.store(true);
   recv_thread_ = std::thread(&IPCClientHandler::RecvPackageLoop, this);
   process_thread_ = std::thread(&IPCClientHandler::FreeSharedMemory, this);
-  CloseSemphore();
+
+  if (inter_communicate_) CloseSemphore();
   return true;
 }
 

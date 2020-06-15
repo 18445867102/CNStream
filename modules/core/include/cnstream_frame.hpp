@@ -166,8 +166,8 @@ class Pipeline;
 struct CNDataFrame {
   std::string stream_id;   ///< The data stream aliases where this frame is located to.
   size_t flags = 0;        ///< The mask for this frame, ``CNFrameFlag``.
-  int64_t frame_id = -1;   ///< The frame index that incremented from 0.
-  int64_t timestamp = -1;  ///< The time stamp of this frame.
+  uint64_t frame_id = 0;   ///< The frame index that incremented from 0.
+  uint64_t timestamp = 0;  ///< The time stamp of this frame.
 
   /**
    * The source data information. You need to set the information before calling CopyToSyncMem().

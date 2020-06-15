@@ -65,8 +65,8 @@ typedef struct {
   uint32_t channel_idx = INVALID_STREAM_IDX;  ///< The index of the channel, stream_index
   std::string stream_id;                      ///< The data stream aliases where this frame is located to.
   size_t flags = 0;                           ///< The mask for this frame, ``CNFrameFlag``.
-  int64_t frame_id;                           ///< The frame index that incremented from 0.
-  int64_t timestamp;                          ///< The time stamp of this frame.
+  uint64_t frame_id;                           ///< The frame index that incremented from 0.
+  uint64_t timestamp;                          ///< The time stamp of this frame.
   CNDataFormat fmt;                           ///< The format of the frame.
   int width;                                  ///< The width of the frame.
   int height;                                 ///< The height of the frame.
@@ -75,7 +75,6 @@ typedef struct {
   DevContext ctx;                             ///< The device context of this frame.
   MemMapType mem_map_type;                    ///< memory map/shared type.
   void* mlu_mem_handle;                       ///< The MLU memory handle for mlu data.
-  int shared_mem_fd;                          ///< shared memory fd.
   std::vector<CNInferObjInfo> detect_objs;    ///< detection objects.
 } FrameInfoPackage;
 
